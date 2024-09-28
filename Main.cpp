@@ -2,7 +2,8 @@
 #include <format>
 
 #include <SFML/Graphics.hpp> // RenderWindow
-//#include <SFML/Window.hpp> // defines sf::Event
+
+#include "LogicGate.hpp"
 
 
 constexpr unsigned int framerateCap {300};
@@ -44,7 +45,7 @@ int main(int argc, char** argv)
     mainwindow.setVerticalSyncEnabled(usingVsync);
     
     sf::Image spriteSheet;
-    const std::string spriteSheetPath {"LogicGateSpriteSheet_1024.png"};
+    const std::string spriteSheetPath {"LogicGateSpriteSheet_Labeled.png"};
     if(!spriteSheet.loadFromFile(spriteSheetPath)) {
         std::cerr << "Failed to load image: '" << spriteSheetPath << "'\n Exiting.\n"; return 1;
     }
@@ -54,15 +55,29 @@ int main(int argc, char** argv)
         std::cout << "Failed to set texture!\n Exiting.\n"; return 2;
     }
     
-    std::array<sf::Sprite, 8> sprites;
-    for (int i{0}; i < 8; ++i) {
-        //constexpr int W {128}, H {64};
-        constexpr int W {512}, H {256};
+    std::array<sf::Sprite, LogicGate::LAST_ENUM> sprites;
+    for (int i{0}; i < LogicGate::LAST_ENUM; ++i) 
+    {
+        constexpr int W {512}, H {256}; // 1024x1024
         const int X {W*(i%2)}, Y {H*(i/2)};
         sf::Sprite& sprite = sprites[i];
         sprite = sf::Sprite {spriteSheetTexture, sf::IntRect(X, Y, W, H)};
         sprite.setPosition(X, Y);
-        //sprite.setScale(0.5f, 0.5f);
+        //sprite.setScale(0.25f, 0.25f);
+        
+        if(i<2) continue; // skip truth-table for unary operators
+        std::cout << LogicGate::GetName(LogicGate::OpType(i)) << "\n";
+        
+        #define EVALTEST(a, b) std::cout << std::boolalpha << \
+            std::format( "  ({}, {}): {}\n", a, b, LogicGate::Eval(LogicGate::OpType(i), a, b) );
+        
+        EVALTEST(true, true);
+        EVALTEST(true, false);
+        EVALTEST(false, true);
+        EVALTEST(false, false);
+        
+        #undef EVALTEST
+        std::cout << '\n';
     }
     
     while (mainwindow.isOpen())
@@ -74,6 +89,19 @@ int main(int argc, char** argv)
             {
                 case sf::Event::Closed:
                     mainwindow.close();
+                break;
+                
+                case sf::Event::KeyPressed:
+                {
+                    switch(event.key.code)
+                    {
+                        case sf::Keyboard::Q:
+                            mainwindow.close();
+                        break;
+                        
+                        default: break;
+                    }
+                }
                 break;
                 
                 default: break;
