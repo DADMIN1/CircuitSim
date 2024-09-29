@@ -1,13 +1,16 @@
 #include <iostream>
 #include <format>
 
-#include <SFML/Graphics.hpp> // RenderWindow
+#include <SFML/Window.hpp> //sf::Event
 
 #include "LogicGate.hpp"
+#include "TextureStorage.hpp"
+#include "SelectorWindow.hpp"
 
 
-constexpr unsigned int framerateCap {300};
 bool usingVsync {false};
+extern constexpr unsigned int framerateCap{300};
+extern const sf::Color backgroundColor{0x999999FF};
 
 
 void PrintProgramConfiguration()
@@ -40,32 +43,17 @@ int main(int argc, char** argv)
     
     PrintProgramConfiguration();
     
-    sf::RenderWindow mainwindow (sf::VideoMode(1024, 1024), "Circuit Simulator", sf::Style::Default);
-    mainwindow.setFramerateLimit(framerateCap);
-    mainwindow.setVerticalSyncEnabled(usingVsync);
+    sf::RenderWindow mainWindow (sf::VideoMode(1024, 1024), "Circuit Simulator", sf::Style::Close);
+    mainWindow.setFramerateLimit(framerateCap);
+    mainWindow.setVerticalSyncEnabled(usingVsync);
     
-    sf::Image spriteSheet;
-    const std::string spriteSheetPath {"LogicGateSpriteSheet_Labeled.png"};
-    if(!spriteSheet.loadFromFile(spriteSheetPath)) {
-        std::cerr << "Failed to load image: '" << spriteSheetPath << "'\n Exiting.\n"; return 1;
-    }
+    int status = TextureStorage::Init(0.25f);
+    if(status != 0) { return status; }
     
-    sf::Texture spriteSheetTexture;
-    if(!spriteSheetTexture.loadFromImage(spriteSheet /*, sf::IntRect(0, 0, 1024, 1024)*/)) {
-        std::cout << "Failed to set texture!\n Exiting.\n"; return 2;
-    }
+    SelectorWindow selectorWindow (0.25f);
     
-    std::array<sf::Sprite, LogicGate::LAST_ENUM> sprites;
-    for (int i{0}; i < LogicGate::LAST_ENUM; ++i) 
+    for (int i{2}; i < LogicGate::LAST_ENUM; ++i) 
     {
-        constexpr int W {512}, H {256}; // 1024x1024
-        const int X {W*(i%2)}, Y {H*(i/2)};
-        sf::Sprite& sprite = sprites[i];
-        sprite = sf::Sprite {spriteSheetTexture, sf::IntRect(X, Y, W, H)};
-        sprite.setPosition(X, Y);
-        //sprite.setScale(0.25f, 0.25f);
-        
-        if(i<2) continue; // skip truth-table for unary operators
         std::cout << LogicGate::GetName(LogicGate::OpType(i)) << "\n";
         
         #define EVALTEST(a, b) std::cout << std::boolalpha << \
@@ -80,15 +68,21 @@ int main(int argc, char** argv)
         std::cout << '\n';
     }
     
-    while (mainwindow.isOpen())
+    
+    while (mainWindow.isOpen())
     {
+        if (selectorWindow.isOpen()) {
+            selectorWindow.EventLoop();
+            selectorWindow.Redraw();
+        }
+        
         sf::Event event;
-        while(mainwindow.pollEvent(event))
+        while(mainWindow.pollEvent(event))
         {
             switch(event.type)
             {
                 case sf::Event::Closed:
-                    mainwindow.close();
+                    mainWindow.close();
                 break;
                 
                 case sf::Event::KeyPressed:
@@ -96,7 +90,7 @@ int main(int argc, char** argv)
                     switch(event.key.code)
                     {
                         case sf::Keyboard::Q:
-                            mainwindow.close();
+                            mainWindow.close();
                         break;
                         
                         default: break;
@@ -108,13 +102,8 @@ int main(int argc, char** argv)
             }
         }
         
-        //mainwindow.clear(sf::Color::Transparent);
-        mainwindow.clear(sf::Color(0x999999FF));
-        for (const sf::Sprite& sprite: sprites) {
-            mainwindow.draw(sprite);
-        }
-        
-        mainwindow.display();
+        mainWindow.clear(backgroundColor);
+        mainWindow.display();
     }
     
     return 0;

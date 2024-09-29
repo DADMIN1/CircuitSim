@@ -1,5 +1,4 @@
-MAKEFLAGS += --warn-undefined-variables
-#MAKEFLAGS += -j8 --output-sync=target --warn-undefined-variables
+MAKEFLAGS += -j --output-sync=target --warn-undefined-variables
 
 ifndef CXX
 CXX := g++
