@@ -42,9 +42,9 @@ SelectorWindow::SelectorWindow(float scale): spriteScale{scale}
 }
 
 
-LogicGate::OpType SelectorWindow::NextSelection(OpType sel, bool reverse, bool byColumn)
+LogicGate::OpType SelectorWindow::NextSelection(bool reverse, bool byColumn)
 {
-    int next = static_cast<int>(sel);
+    int next = static_cast<int>(selection);
     int offset = (byColumn? 2 : 1);
     if(reverse) offset *= -1;
     
@@ -59,6 +59,7 @@ LogicGate::OpType SelectorWindow::NextSelection(OpType sel, bool reverse, bool b
 void SelectorWindow::SetSelection(OpType sel)
 {
     selection = sel;
+    selectionHasChanged = true;
     
     //constexpr int W {512}, H {256}; // 1024x1024
     constexpr int W {128}, H {64}; // 0.25 scale
@@ -85,6 +86,11 @@ void SelectorWindow::EventLoop()
             case sf::Event::KeyPressed:
             switch(event.key.code)
             {
+                case sf::Keyboard::Q:
+                case sf::Keyboard::Tilde:
+                    setVisible(false);
+                break;
+                
                 // maps numpad/numrow inputs
                 #define CASE_KEYNUM_OPTYPE(N) \
                 case sf::Keyboard::Numpad##N: \
@@ -108,7 +114,23 @@ void SelectorWindow::EventLoop()
             }
             break;
             
-            // TODO: handle mouse inputs
+            case sf::Event::MouseButtonPressed:
+            {
+                int opt = 0;
+                for(const sf::Sprite& sprite: TextureStorage::sprites) {
+                    const auto&& [x, y] = sf::Mouse::getPosition(*this);
+                    if(sprite.getGlobalBounds().contains(x, y)) {
+                        SetSelection(OpType(opt));
+                        break;
+                    }
+                    ++opt;
+                }
+            }
+            break;
+            
+            case sf::Event::MouseWheelScrolled:
+                SetSelection(NextSelection((event.mouseWheelScroll.delta >= 0) ,false));
+            break;
             
             default: break;
         }

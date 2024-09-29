@@ -68,12 +68,17 @@ int main(int argc, char** argv)
         std::cout << '\n';
     }
     
+    sf::Sprite heldSprite = TextureStorage::GetSprite(selectorWindow.selection);
     
     while (mainWindow.isOpen())
     {
         if (selectorWindow.isOpen()) {
             selectorWindow.EventLoop();
             selectorWindow.Redraw();
+            if (selectorWindow.selectionHasChanged) {
+                heldSprite = TextureStorage::GetSprite(selectorWindow.selection);
+                selectorWindow.selectionHasChanged = false;
+            }
         }
         
         sf::Event event;
@@ -93,16 +98,54 @@ int main(int argc, char** argv)
                             mainWindow.close();
                         break;
                         
+                        case sf::Keyboard::Tilde:
+                            selectorWindow.setVisible(true);
+                        break;
+                        
+                        // maps numpad/numrow inputs
+                        #define CASE_KEYNUM_OPTYPE(N) \
+                        case sf::Keyboard::Numpad##N: \
+                        case sf::Keyboard::Num##N:    \
+                            selectorWindow.SetSelection(LogicGate::OpType(N)); \
+                        break;
+                        
+                        case sf::Keyboard::Escape:
+                            CASE_KEYNUM_OPTYPE(0);
+                            CASE_KEYNUM_OPTYPE(1);
+                            CASE_KEYNUM_OPTYPE(2);
+                            CASE_KEYNUM_OPTYPE(3);
+                            CASE_KEYNUM_OPTYPE(4);
+                            CASE_KEYNUM_OPTYPE(5);
+                            CASE_KEYNUM_OPTYPE(6);
+                            CASE_KEYNUM_OPTYPE(7);
+                        static_assert(7 < LogicGate::OpType::LAST_ENUM);
+                        #undef CASE_KEYNUM_OPTYPE
+                        
                         default: break;
                     }
                 }
                 break;
+                
+                case sf::Event::MouseWheelScrolled:
+                    selectorWindow.SetSelection(
+                        selectorWindow.NextSelection((event.mouseWheelScroll.delta >= 0) ,false)
+                    );
+                break;
+                
                 
                 default: break;
             }
         }
         
         mainWindow.clear(backgroundColor);
+        
+        if (selectorWindow.selection > 0)
+        {
+            const auto&& [x, y] = sf::Mouse::getPosition(mainWindow);
+            heldSprite.setPosition(x-64, y-32); // offsets to center it
+            mainWindow.draw(heldSprite);
+        }
+        
         mainWindow.display();
     }
     

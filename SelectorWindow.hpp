@@ -12,9 +12,10 @@ class SelectorWindow: sf::RenderWindow
     using OpType = LogicGate::OpType;
     OpType selection;
     float spriteScale;
+    bool selectionHasChanged{false};
     sf::RectangleShape selectionRect{};
     
-    OpType NextSelection(OpType, bool reverse=false, bool byColumn=false);
+    OpType NextSelection(bool reverse=false, bool byColumn=false);
     void SetSelection(OpType);
     void EventLoop();
     void Redraw();
