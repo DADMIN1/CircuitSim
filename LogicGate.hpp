@@ -45,7 +45,7 @@ class LogicGate
         }
     }
     
-    std::string GetName() { return GetName(mType); }
+    std::string GetName() const { return GetName(mType); }
     
     LogicGate(OpType T): UUID{nextID++}, mType{T}
     { ; }

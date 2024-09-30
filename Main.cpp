@@ -6,11 +6,18 @@
 #include "LogicGate.hpp"
 #include "TextureStorage.hpp"
 #include "SelectorWindow.hpp"
+#include "Interactives.hpp"
+
+
+//create a component for each gate on startup and validate pincount
+#define CHECK_COMPONENT_PINCOUNT
+//#undef CHECK_COMPONENT_PINCOUNT
 
 
 bool usingVsync {false};
 extern constexpr unsigned int framerateCap{300};
 extern const sf::Color backgroundColor{0x999999FF};
+constexpr float spriteScale = 0.25f;
 
 
 void PrintProgramConfiguration()
@@ -47,28 +54,42 @@ int main(int argc, char** argv)
     mainWindow.setFramerateLimit(framerateCap);
     mainWindow.setVerticalSyncEnabled(usingVsync);
     
-    int status = TextureStorage::Init(0.25f);
+    int status = TextureStorage::Init(spriteScale);
     if(status != 0) { return status; }
     
-    SelectorWindow selectorWindow (0.25f);
+    SelectorWindow selectorWindow (spriteScale);
+    
+    sf::Sprite heldSprite = TextureStorage::GetSprite(selectorWindow.selection);
+    std::vector<Component> components;
+    components.reserve(127);
+    
+    #ifdef CHECK_COMPONENT_PINCOUNT
+      bool tooManyInputs{false};
+      for (int i{1}; i < LogicGate::LAST_ENUM; ++i) {
+          Component& component = components.emplace_back(LogicGate::OpType(i));
+          component.SetPosition(i*64, i*64);
+          std::cout << component.Name() << std::format(": {} inputs", component.GetPinCount()) << '\n';
+          if(component.GetPinCount() > 2) tooManyInputs = true;
+      }
+      if(tooManyInputs) { std::cerr << "\nError: #Inputs > 2 \n Exiting.\n"; return 3; }
+      std::cout << "\n";
+    #endif
+    
+    // printing truth tables
+    #define EVALTEST(a, b) std::cout << std::boolalpha << \
+    std::format( "  ({}, {}): {}\n", a, b, LogicGate::Eval(LogicGate::OpType(i), a, b) );
     
     for (int i{2}; i < LogicGate::LAST_ENUM; ++i) 
     {
         std::cout << LogicGate::GetName(LogicGate::OpType(i)) << "\n";
-        
-        #define EVALTEST(a, b) std::cout << std::boolalpha << \
-            std::format( "  ({}, {}): {}\n", a, b, LogicGate::Eval(LogicGate::OpType(i), a, b) );
-        
         EVALTEST(true, true);
         EVALTEST(true, false);
         EVALTEST(false, true);
         EVALTEST(false, false);
-        
-        #undef EVALTEST
         std::cout << '\n';
     }
+    #undef EVALTEST
     
-    sf::Sprite heldSprite = TextureStorage::GetSprite(selectorWindow.selection);
     
     while (mainWindow.isOpen())
     {
@@ -100,6 +121,7 @@ int main(int argc, char** argv)
                         
                         case sf::Keyboard::Tilde:
                             selectorWindow.setVisible(true);
+                            selectorWindow.requestFocus();
                         break;
                         
                         // maps numpad/numrow inputs
@@ -128,8 +150,12 @@ int main(int argc, char** argv)
                 
                 case sf::Event::MouseWheelScrolled:
                     selectorWindow.SetSelection(
-                        selectorWindow.NextSelection((event.mouseWheelScroll.delta >= 0) ,false)
+                        selectorWindow.NextSelection((event.mouseWheelScroll.delta >= 0), false)
                     );
+                break;
+                
+                case sf::Event::MouseButtonPressed:
+                    components.emplace_back(selectorWindow.selection, heldSprite);
                 break;
                 
                 
@@ -138,6 +164,8 @@ int main(int argc, char** argv)
         }
         
         mainWindow.clear(backgroundColor);
+        
+        for(const Component& component: components) { mainWindow.draw(component); }
         
         if (selectorWindow.selection > 0)
         {

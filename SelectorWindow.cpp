@@ -50,7 +50,7 @@ LogicGate::OpType SelectorWindow::NextSelection(bool reverse, bool byColumn)
     
     next += offset;
     next = next % OpType::LAST_ENUM;
-    if(next <= 0) next = 1;
+    if(next <= 0) next = (reverse? (OpType::LAST_ENUM-1) : 1);
     
     return OpType(next);
 }
