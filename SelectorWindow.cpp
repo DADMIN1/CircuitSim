@@ -34,7 +34,7 @@ SelectorWindow::SelectorWindow(float scale): spriteScale{scale}
     selectionRect.setFillColor(sf::Color::Transparent);
     selectionRect.setOutlineColor(sf::Color::Cyan);
     selectionRect.setOutlineThickness(-4.f);
-    SetSelection(OpType::AND);
+    SetSelection(OpType::EQ);
     
     Redraw();
     

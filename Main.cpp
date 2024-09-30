@@ -53,6 +53,7 @@ int main(int argc, char** argv)
     sf::RenderWindow mainWindow (sf::VideoMode(1024, 1024), "Circuit Simulator", sf::Style::Close);
     mainWindow.setFramerateLimit(framerateCap);
     mainWindow.setVerticalSyncEnabled(usingVsync);
+    mainWindow.setPosition({2600, 0});
     
     int status = TextureStorage::Init(spriteScale);
     if(status != 0) { return status; }
@@ -90,7 +91,7 @@ int main(int argc, char** argv)
     }
     #undef EVALTEST
     
-    
+    bool outputPinSelected{false};
     while (mainWindow.isOpen())
     {
         if (selectorWindow.isOpen()) {
@@ -155,9 +156,51 @@ int main(int argc, char** argv)
                 break;
                 
                 case sf::Event::MouseButtonPressed:
-                    components.emplace_back(selectorWindow.selection, heldSprite);
+                    if (selectorWindow.selection > 0) // place component if it's not 'EQ'
+                    { components.emplace_back(selectorWindow.selection, heldSprite); }
+                    else
+                    {
+                        bool hitboxFound{false};
+                        std::string identifier;
+                        const sf::Vector2f mousePosition{ sf::Mouse::getPosition(mainWindow) };
+                        
+                        for (const Component& component: components) 
+                        {
+                            if (component.isOutputPinClicked(mousePosition)) {
+                                identifier = std::format("{} output-pin", component.UUID());
+                                hitboxFound = true; outputPinSelected =  true; break;
+                            } else if(component.inputHitboxClicked(mousePosition)) {
+                                identifier = std::format("{} input-pin", component.UUID());
+                                hitboxFound = true; outputPinSelected = false; break;
+                            } else if(component.ContainsCoord(mousePosition)) {
+                                identifier = std::format("{}", component.UUID());
+                                hitboxFound = true; outputPinSelected = false; break;
+                            }
+                        }
+                        if (!hitboxFound) identifier = "empty click";
+                        std::cout << std::format("{} @({}, {})", identifier, mousePosition.x, mousePosition.y);
+                        if (!outputPinSelected) std::cout << '\n';
+                    }
                 break;
                 
+                case sf::Event::MouseButtonReleased:
+                {
+                    if (selectorWindow.selection != LogicGate::OpType::EQ) break;
+                    if (!outputPinSelected) break; // only output pins can be routed to input
+                    outputPinSelected = false;
+                    
+                    bool hitboxFound{false};
+                    const sf::Vector2f mousePosition{ sf::Mouse::getPosition(mainWindow) };
+                    for (const Component& component: components) {
+                        if (component.inputHitboxClicked(mousePosition)) {
+                            std::cout << std::format(" -> {} input-pin @({}, {})\n",
+                                component.UUID(), mousePosition.x, mousePosition.y);
+                            hitboxFound = true; break;
+                        }
+                    }
+                    if (!hitboxFound) std::cout << '\n'; // flushing held output
+                }
+                break;
                 
                 default: break;
             }

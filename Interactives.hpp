@@ -19,18 +19,15 @@ struct Pin: sf::RectangleShape
     const int index; // counting connections for current component. Used to offset wire layouts
     bool isConnected{false};
     bool state{false};
-    
     //sf::Text label;
-    //sf::RectangleShape hitbox{10.f};
-    //using setPosition = sf::RectangleShape::setPosition;
     
-    static constexpr float size = 10.f;
+    static constexpr float size = 25.f;
     Pin(Type T, int I): sf::RectangleShape{{size, size}}, mtype{T}, index{I}
     {
         setOrigin(size/2.f, size/2.f);
         setFillColor(sf::Color::Transparent);
         setOutlineColor(sf::Color::White);
-        setOutlineThickness(2.f);
+        setOutlineThickness(-1.f);
     }
 };
 
@@ -50,11 +47,26 @@ class Component: public sf::Drawable
         target.draw(sprite, states);
         for (const Pin& pin: inputs ) { target.draw(pin); }
         for (const Pin& pin: outputs) { target.draw(pin); }
-        return;
     }
     
+    inline std::string UUID() const { return gate.GetName() + '_' + std::to_string(gate.UUID); }
     inline std::string Name() const { return gate.GetName(); }
     std::size_t GetPinCount() const { return inputs.size() ; }
+    
+    bool isOutputPinClicked(const sf::Vector2f& coord) const
+    { return outputs[0].getGlobalBounds().contains(coord); }
+    
+    bool inputHitboxClicked(const sf::Vector2f& coord) const {
+        for(const Pin& pin: inputs) { if(pin.getGlobalBounds().contains(coord)) return true; }
+        return false;
+    }
+    
+    bool ContainsCoord(const sf::Vector2f& coord) const {
+        bool spriteContains = sprite.getGlobalBounds().contains(coord);
+        bool ouputsContains = isOutputPinClicked(coord);
+        bool inputsContains = inputHitboxClicked(coord);
+        return (spriteContains || ouputsContains || inputsContains);
+    }
     
     void SetPosition(float X, float Y)
     {

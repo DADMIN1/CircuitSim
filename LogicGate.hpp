@@ -11,6 +11,7 @@ class LogicGate
     
     protected:
     bool state {false};
+    friend class Component;
     
     public:
     enum OpType
