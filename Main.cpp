@@ -69,13 +69,26 @@ int main(int argc, char** argv)
       bool tooManyInputs{false};
       for (int i{1}; i < LogicGate::LAST_ENUM; ++i) {
           Component& component = components.emplace_back(LogicGate::OpType(i));
-          component.SetPosition(i*64, i*64);
+          component.SetPosition(i*96, i*64);
           std::cout << component.Name() << std::format(": {} inputs", component.GetPinCount()) << '\n';
           if(component.GetPinCount() > 2) tooManyInputs = true;
+          
+          // staggered
+          Component& componentTwo = components.emplace_back(LogicGate::OpType(i));
+          componentTwo.SetPosition(i*96, ((i-1)*64 + 512));
       }
       if(tooManyInputs) { std::cerr << "\nError: #Inputs > 2 \n Exiting.\n"; return 3; }
       std::cout << "\n";
     #endif
+    
+    MakeGlobalIO(components, true, std::vector<bool>{ true, false, /*true, false, true, false, true, false,*/ } );
+    MakeGlobalIO(components, false, {});
+    
+    {
+        std::vector<Component> InputBits{};
+        for(const Component& component: components) { if(component.isGlobalIn) InputBits.push_back(component); }
+        std::cout << "\nGlobal Input = " << ReadIO(InputBits ) << "\n\n";
+    }
     
     // printing truth tables
     #define EVALTEST(a, b) std::cout << std::boolalpha << \
@@ -145,6 +158,19 @@ int main(int argc, char** argv)
                         static_assert(7 < LogicGate::OpType::LAST_ENUM);
                         #undef CASE_KEYNUM_OPTYPE
                         
+                        case sf::Keyboard::Space:
+                        {
+                            for(Component& component: components) { component.PropagateLogic(); }
+                            
+                            {
+                                std::vector<Component> OutputBits{};
+                                for(const Component& component: components) 
+                                { if(component.isGlobalOut) OutputBits.push_back(component); }
+                                std::cout << "\nGlobal Output = " << ReadIO(OutputBits) << "\n\n";
+                            }
+                        }
+                        break;
+                        
                         default: break;
                     }
                 }
@@ -197,6 +223,8 @@ int main(int argc, char** argv)
                                 component.UUID(), mousePosition.x, mousePosition.y);
                             hitboxFound = true;
                             selectedComponent->CreateConnection(component.getClickedInput(mousePosition));
+                            selectedComponent->PropagateLogic();
+                            component.PropagateLogic();
                             break;
                         }
                     }
