@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <map>
 
 #include <SFML/Graphics/Sprite.hpp>
 #include <SFML/Graphics/RectangleShape.hpp>
@@ -32,6 +33,60 @@ struct Pin: sf::RectangleShape
 };
 
 
+class Wire: public sf::Drawable
+{
+    const Pin& source;
+    const std::string sourceID; // UUID of component providing the 'source' Pin (which must be an 'Output' Pin)
+    std::vector<Pin*> drains{};  // 'input' pins the wire links into
+    
+    static constexpr float thickness{4.f};
+    static constexpr float leadLength{36.f}; // length of segments leading in/out of gates
+    std::vector<sf::RectangleShape> lines{};
+    
+    public:
+    friend class Component;
+    
+    // implementing the SFML 'draw' function for this class
+    virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override 
+    { for (const sf::RectangleShape& line: lines) { target.draw(line, states); } }
+    
+    void UpdateColor() {
+        sf::Color lineColor{(source.state? sf::Color::Red : sf::Color::Black)};
+        for (sf::RectangleShape& line: lines) { line.setFillColor(lineColor); }
+    }
+    
+    void LinkTo(Pin* pin)
+    {
+        drains.push_back(pin);
+        sf::Vector2f dist { pin->getPosition() - source.getPosition() };
+        
+        sf::RectangleShape& vertical = lines.emplace_back(sf::Vector2f{thickness, dist.y});
+        vertical.setOrigin({thickness, 0});
+        vertical.setPosition(source.getPosition()); // hitbox is positioned at the end of the lead
+        
+        sf::RectangleShape& horizontal = lines.emplace_back(sf::Vector2f{dist.x, thickness});
+        horizontal.setOrigin({0, thickness/2.f}); // don't change X-origin; it complicates alignment
+        horizontal.setPosition(source.getPosition()); horizontal.move({0, dist.y}); // aligning to body of gate
+        
+        UpdateColor();
+        return;
+    }
+    
+    Wire() = delete;
+    
+    explicit Wire(const Pin& sourcePin, std::string componentID)
+    : source{sourcePin}, sourceID{componentID+std::to_string(sourcePin.index)}
+    { 
+        drains.reserve(1);
+        lines.reserve(3); // output-lead, vertical segment, then main segment
+        
+        sf::RectangleShape& leadout = lines.emplace_back(sf::Vector2f{leadLength, thickness});
+        leadout.setOrigin({0, thickness/2.f}); // don't change X-origin; it complicates alignment
+        leadout.setPosition(source.getPosition()); leadout.move({-leadLength, 0}); // aligning to body of gate
+    }
+};
+
+
 class Component: public sf::Drawable
 {
     //sf::Text label;
@@ -39,14 +94,18 @@ class Component: public sf::Drawable
     sf::Sprite sprite;
     std::vector<Pin> inputs;
     std::vector<Pin> outputs;
+    std::vector<sf::RectangleShape> leads; // on inputs
+    static std::map<std::string, Wire> wireMap; // key is parent (input) component's UUID
     
-  public:
+    public:
     // implementing the SFML 'draw' function for this class
     virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override 
     {
         target.draw(sprite, states);
         for (const Pin& pin: inputs ) { target.draw(pin); }
         for (const Pin& pin: outputs) { target.draw(pin); }
+        for (const auto& lead: leads) { target.draw(lead); }
+        if (wireMap.contains(UUID())) { target.draw(wireMap.at(UUID())); }
     }
     
     inline std::string UUID() const { return gate.GetName() + '_' + std::to_string(gate.UUID); }
@@ -61,11 +120,23 @@ class Component: public sf::Drawable
         return false;
     }
     
+    Pin* getClickedInput(const sf::Vector2f& coord) {
+        for(Pin& pin: inputs) { if(pin.getGlobalBounds().contains(coord)) return &pin; }
+        return nullptr;
+    }
+    
     bool ContainsCoord(const sf::Vector2f& coord) const {
         bool spriteContains = sprite.getGlobalBounds().contains(coord);
         bool ouputsContains = isOutputPinClicked(coord);
         bool inputsContains = inputHitboxClicked(coord);
         return (spriteContains || ouputsContains || inputsContains);
+    }
+    
+    void CreateConnection(Pin* target)
+    {
+        if(!target) return;
+        if(!wireMap.contains(UUID())) { wireMap.emplace(UUID(), Wire{outputs[0], UUID()}); }
+        wireMap.at(UUID()).LinkTo(target);
     }
     
     void SetPosition(float X, float Y)
@@ -76,9 +147,12 @@ class Component: public sf::Drawable
         const float vOffset = sprite.getGlobalBounds().height / (inputs.size()*2);
         
         for (Pin& pin: inputs) {
+            // wires' spacing is biased towards edge, so additonal offset is needed
             pin.setPosition(X + hOffset, Y + vOffset*(1 + pin.index*2));
             //if(pin.index > 0) pin.move(0, vOffset);
-            // wires' spacing is biased towards edge, so additonal offset is needed
+            
+            sf::RectangleShape& lead = leads[pin.index];
+            lead.setPosition(pin.getPosition()); // assuming left-side
         }
         
         // assuming only one output
@@ -94,11 +168,18 @@ class Component: public sf::Drawable
         //sprite.setOrigin(size.x/2.f, size.y/2.f);
         
         inputs.reserve(2);
+        leads.reserve(2);
         if(name.empty()) { name = gate.GetName(); }
         // label = name;
         
         int numInputs = ((gate.mType <= 1)? 1 : 2);
-        for (int I{0}; I < numInputs; ++I) { inputs.emplace_back(Pin::Input, I); }
+        for (int I{0}; I < numInputs; ++I) { 
+            Pin& pin = inputs.emplace_back(Pin::Input, I);
+            sf::RectangleShape& lead = leads.emplace_back(sf::Vector2f{Wire::leadLength, Wire::thickness});
+            lead.setFillColor(sf::Color::Black);
+            lead.setOrigin({0, Wire::thickness/2.f});
+            lead.setPosition(pin.getPosition()); // assuming left-side
+        }
         outputs.emplace_back(Pin::Output, 0);
         
         const auto&[X, Y] = sprite.getPosition();

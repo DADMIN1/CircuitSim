@@ -63,6 +63,7 @@ int main(int argc, char** argv)
     sf::Sprite heldSprite = TextureStorage::GetSprite(selectorWindow.selection);
     std::vector<Component> components;
     components.reserve(127);
+    Component* selectedComponent{nullptr};
     
     #ifdef CHECK_COMPONENT_PINCOUNT
       bool tooManyInputs{false};
@@ -91,7 +92,7 @@ int main(int argc, char** argv)
     }
     #undef EVALTEST
     
-    bool outputPinSelected{false};
+    
     while (mainWindow.isOpen())
     {
         if (selectorWindow.isOpen()) {
@@ -164,41 +165,43 @@ int main(int argc, char** argv)
                         std::string identifier;
                         const sf::Vector2f mousePosition{ sf::Mouse::getPosition(mainWindow) };
                         
-                        for (const Component& component: components) 
+                        for (Component& component: components)
                         {
                             if (component.isOutputPinClicked(mousePosition)) {
                                 identifier = std::format("{} output-pin", component.UUID());
-                                hitboxFound = true; outputPinSelected =  true; break;
+                                hitboxFound = true; selectedComponent = &component; break;
                             } else if(component.inputHitboxClicked(mousePosition)) {
                                 identifier = std::format("{} input-pin", component.UUID());
-                                hitboxFound = true; outputPinSelected = false; break;
+                                hitboxFound = true; selectedComponent = nullptr; break;
                             } else if(component.ContainsCoord(mousePosition)) {
                                 identifier = std::format("{}", component.UUID());
-                                hitboxFound = true; outputPinSelected = false; break;
+                                hitboxFound = true; selectedComponent = nullptr; break;
                             }
                         }
                         if (!hitboxFound) identifier = "empty click";
                         std::cout << std::format("{} @({}, {})", identifier, mousePosition.x, mousePosition.y);
-                        if (!outputPinSelected) std::cout << '\n';
+                        if (!selectedComponent) std::cout << '\n';
                     }
                 break;
                 
                 case sf::Event::MouseButtonReleased:
                 {
                     if (selectorWindow.selection != LogicGate::OpType::EQ) break;
-                    if (!outputPinSelected) break; // only output pins can be routed to input
-                    outputPinSelected = false;
+                    if (!selectedComponent) break; // only output pins can be routed to input
                     
                     bool hitboxFound{false};
                     const sf::Vector2f mousePosition{ sf::Mouse::getPosition(mainWindow) };
-                    for (const Component& component: components) {
+                    for (Component& component: components) {
                         if (component.inputHitboxClicked(mousePosition)) {
                             std::cout << std::format(" -> {} input-pin @({}, {})\n",
                                 component.UUID(), mousePosition.x, mousePosition.y);
-                            hitboxFound = true; break;
+                            hitboxFound = true;
+                            selectedComponent->CreateConnection(component.getClickedInput(mousePosition));
+                            break;
                         }
                     }
                     if (!hitboxFound) std::cout << '\n'; // flushing held output
+                    selectedComponent = nullptr;
                 }
                 break;
                 
