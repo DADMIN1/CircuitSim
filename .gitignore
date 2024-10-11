@@ -1,4 +1,5 @@
 circuitsym
+circuitsym_dbg
 build/
 Images/
-
+.vscode/
