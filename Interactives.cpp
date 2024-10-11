@@ -1,7 +1,5 @@
 #include "Interactives.hpp"
 
-//static map
-std::map<std::string, Wire> Component::wireMap; // key is parent (input) component's UUID
 
 void MakeGlobalIO(std::vector<Component>& components, bool isInput, std::vector<bool> inputBits)
 {

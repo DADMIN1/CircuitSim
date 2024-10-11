@@ -223,7 +223,7 @@ int main(int argc, char** argv)
                             std::cout << std::format(" -> {} input-pin @({}, {})\n",
                                 component.UUID(), mousePosition.x, mousePosition.y);
                             hitboxFound = true;
-                            selectedComponent->CreateConnection(component.getClickedInput(mousePosition));
+                            selectedComponent->CreateConnection(&component, component.getClickedInput(mousePosition));
                             selectedComponent->PropagateLogic();
                             component.PropagateLogic();
                             break;

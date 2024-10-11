@@ -16,14 +16,20 @@
 
 struct Pin: sf::RectangleShape
 {
-    const enum Type { Input, Output, } mtype;
+    const enum Type { Output, Input, } mtype;
     const int index; // counting connections for current component. Used to offset wire layouts
     bool isConnected{false};
     bool state{false};
+    const std::string UUID; // component UUID + index (index counts from 1 for inputs)
     //sf::Text label;
     
+    bool BelongsTo(std::string parentUID) const {
+        return (UUID == (parentUID + '#' + std::to_string(index+mtype)));
+    }
+    
     static constexpr float size = 25.f;
-    Pin(Type T, int I): sf::RectangleShape{{size, size}}, mtype{T}, index{I}
+    Pin(Type T, int I, std::string S): sf::RectangleShape{{size, size}}, 
+       mtype{T}, index{I}, UUID{ S + '#' + std::to_string(index+mtype)}
     {
         setOrigin(size/2.f, size/2.f);
         setFillColor(sf::Color::Transparent);
@@ -36,12 +42,12 @@ struct Pin: sf::RectangleShape
 class Wire: public sf::Drawable
 {
     const Pin& source;
-    const std::string sourceID; // UUID of component providing the 'source' Pin (which must be an 'Output' Pin)
-    std::vector<Pin*> drains{};  // 'input' pins the wire links into
+    const std::string parentID; // UUID of component providing the 'source' Pin (which must be an 'Output' Pin)
+    std::vector<sf::RectangleShape> lines{};
+    Pin* drain{nullptr};
     
     static constexpr float thickness{4.f};
     static constexpr float leadLength{36.f}; // length of segments leading in/out of gates
-    std::vector<sf::RectangleShape> lines{};
     
     public:
     friend class Component;
@@ -60,13 +66,15 @@ class Wire: public sf::Drawable
     }
     
     void PropagateState() {
-        for(Pin* drain: drains) { drain->state = source.state; }
+        if(drain) { drain->state = source.state; }
         UpdateColor();
     }
     
     void LinkTo(Pin* pin)
     {
-        drains.push_back(pin);
+        pin->isConnected = true;
+        drain = pin;
+        
         const sf::Vector2f dist{ pin->getPosition() - source.getPosition() };
         const sf::Vector2f halfDist {dist/2.f};
         constexpr float halfThick {thickness/2.f};
@@ -112,9 +120,8 @@ class Wire: public sf::Drawable
     
     Wire() = delete;
     explicit Wire(const Pin& sourcePin, std::string componentID)
-    : source{sourcePin}, sourceID{componentID+std::to_string(sourcePin.index)}
+    : source{sourcePin}, parentID{componentID}
     { 
-        drains.reserve(1);
         lines.reserve(3); //two primary segments + a middle joining segment
     }
 };
@@ -128,21 +135,14 @@ class Component: public sf::Drawable
     std::vector<Pin> inputs;
     std::vector<Pin> outputs;
     std::vector<sf::RectangleShape> leads; // line segments leading in/out of gates
-    static std::map<std::string, Wire> wireMap; // key is parent (input) component's UUID
+    
+    // keys are the pin-UUIDs
+    std::map<std::string, Component*> incoming; //key is input-pinID, value is parent of connecting wire
+    std::map<std::string, Wire> wires; //key is target pinID
     
     public:
-    bool isGlobalIn {false};
+    bool isGlobalIn {false}; //TODO: this is bad
     bool isGlobalOut{false};
-    
-    // implementing the SFML 'draw' function for this class
-    virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override 
-    {
-        target.draw(sprite, states);
-        for (const Pin& pin: inputs ) { target.draw(pin, states); }
-        for (const Pin& pin: outputs) { target.draw(pin, states); }
-        if (wireMap.contains(UUID())) { target.draw(wireMap.at(UUID()), states); }
-        for (const auto& lead: leads) { target.draw(lead,states); }
-    }
     
     inline std::string UUID() const { return gate.GetName() + '_' + std::to_string(gate.UUID); }
     inline std::string Name() const { return gate.GetName(); }
@@ -179,24 +179,46 @@ class Component: public sf::Drawable
         outputs[0].setFillColor(sf::Color::Transparent);
     }
     
+    // implementing the SFML 'draw' function for this class
+    virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override 
+    {
+        target.draw(sprite, states);
+        for (const Pin& pin: inputs ) { target.draw(pin, states); }
+        for (const Pin& pin: outputs) { target.draw(pin, states); }
+        for (const auto& lead: leads) { target.draw(lead,states); }
+        for(const auto&[s,wire]:wires){ target.draw(wire,states); }
+    }
+    
     void PropagateLogic()
     {
+        outputs[0].isConnected = !wires.empty();
         bool oldState = gate.state;
         if (oldState != gate.Update(inputs[0].state, inputs[1].state)) 
         {
             outputs[0].state = gate.state;
             sprite.setTexture(*TextureStorage::GetSprite(gate.mType, gate.state).getTexture());
-            if(wireMap.contains(UUID())) { wireMap.at(UUID()).PropagateState(); }
+            for(auto& [s,wire]: wires) { wire.PropagateState(); }
         }
         UpdateLeadColors();
         return;
     }
     
-    void CreateConnection(Pin* target)
+    void CreateConnection(Component* target, Pin* targetPin)
     {
-        if(!target) return;
-        if(!wireMap.contains(UUID())) { wireMap.emplace(UUID(), Wire{outputs[0], UUID()}); }
-        wireMap.at(UUID()).LinkTo(target);
+        if(!target || !targetPin) return;
+        if (target == this) return; // disallow self-connections
+        
+        // check other connections to target, and disconnect them if they go to targetPin
+        if (target->incoming.contains(targetPin->UUID)) {
+            Component* oldParent = target->incoming[targetPin->UUID];
+            oldParent->wires.erase(targetPin->UUID);
+            target->incoming.erase(targetPin->UUID);
+        }
+        
+        outputs[0].isConnected = true;
+        target->incoming[targetPin->UUID] = this;
+        Wire& wire = wires.emplace(targetPin->UUID, Wire{outputs[0], UUID()}).first->second;
+        wire.LinkTo(targetPin);
         PropagateLogic();
         return;
     }
@@ -237,12 +259,12 @@ class Component: public sf::Drawable
         
         inputs.reserve(2);
         leads.reserve(3); // 2 input, 1 output
-        if(name.empty()) { name = gate.GetName(); }
+        if(name.empty()) { name = gate.GetName(); }  //TODO: name is unused
         // label = name;
         
         int numInputs = ((gate.mType <= 1)? 1 : 2);
         for (int I{0}; I < numInputs; ++I) { 
-            Pin& pin = inputs.emplace_back(Pin::Input, I);
+            Pin& pin = inputs.emplace_back(Pin::Input, I, UUID());
             sf::RectangleShape& lead = leads.emplace_back(sf::Vector2f{Wire::leadLength, Wire::thickness});
             lead.setFillColor(sf::Color::Black);
             lead.setOutlineColor(sf::Color(0xFFFFFFAA));
@@ -250,7 +272,6 @@ class Component: public sf::Drawable
             lead.setOrigin({0, Wire::thickness/2.f});
             lead.setPosition(pin.getPosition()); // assuming left-side
         }
-        outputs.emplace_back(Pin::Output, 0);
         
         sf::RectangleShape& leadout = leads.emplace_back(sf::Vector2f{Wire::leadLength, Wire::thickness});
         leadout.setOrigin({0, Wire::thickness/2.f}); // don't change X-origin; it complicates alignment
@@ -266,8 +287,9 @@ class Component: public sf::Drawable
         return;
     }
     
-    explicit Component(LogicGate::OpType T, const sf::Sprite& S, std::string name=""):
-    gate{T}, sprite{S} { Init(name); }
+    explicit Component(LogicGate::OpType T, const sf::Sprite& S, std::string name="")
+    : gate{T}, sprite{S}, outputs{{Pin::Output, 0, UUID()}}
+    { Init(name); }
     
     explicit Component(LogicGate::OpType T, std::string name=""):
              Component(T, TextureStorage::GetSprite(T), name){;}
