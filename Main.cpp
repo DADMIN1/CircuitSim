@@ -195,7 +195,8 @@ int main(int argc, char** argv)
                         {
                             if (component.isOutputPinClicked(mousePosition)) {
                                 identifier = std::format("{} output-pin", component.UUID());
-                                hitboxFound = true; selectedComponent = &component; break;
+                                hitboxFound = true; selectedComponent = &component;
+                                component.HighlightOutputPin(); break;
                             } else if(component.inputHitboxClicked(mousePosition)) {
                                 identifier = std::format("{} input-pin", component.UUID());
                                 hitboxFound = true; selectedComponent = nullptr; break;
