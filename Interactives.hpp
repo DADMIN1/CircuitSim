@@ -185,6 +185,7 @@ class Component: public sf::Drawable
         if (oldState != gate.Update(inputs[0].state, inputs[1].state)) 
         {
             outputs[0].state = gate.state;
+            sprite.setTexture(*TextureStorage::GetSprite(gate.mType, gate.state).getTexture());
             if(wireMap.contains(UUID())) { wireMap.at(UUID()).PropagateState(); }
         }
         UpdateLeadColors();
