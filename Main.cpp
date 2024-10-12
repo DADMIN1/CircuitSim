@@ -1,5 +1,6 @@
 #include <iostream>
 #include <format>
+#include <cmath> // for arc-tangent and square-root (in MouseDragLoop)
 
 #include <SFML/Window.hpp> //sf::Event
 
@@ -36,6 +37,40 @@ void PrintProgramConfiguration()
     return;
     #undef PRINT
     #undef PRINTTWO
+}
+
+
+//draws a line following the mouse while holding left-click
+void MouseDragLoop(sf::RenderWindow& mainWindow, sf::Vector2f initalPosition, bool activeColor)
+{
+    auto [szx, szy] = mainWindow.getSize();
+    sf::Texture overlayTexture{}; overlayTexture.create(szx, szy);
+    //overlayTexture.loadFromImage(mainWindow.capture()); //deprecated
+    overlayTexture.update(mainWindow); //captures the window
+    sf::Sprite overlay{overlayTexture};
+    
+    sf::RectangleShape dragline{};
+    dragline.setPosition(initalPosition);
+    dragline.setOutlineThickness(-2);
+    dragline.setOutlineColor(sf::Color(0x00000077));
+    dragline.setFillColor(activeColor? sf::Color(0xFF222277) : sf::Color(0xAABBFF88));
+    
+    while(sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) 
+    {
+        auto nextPosition = sf::Vector2f{sf::Mouse::getPosition(mainWindow)};
+        auto [dx,dy] = nextPosition-initalPosition;
+        
+        dragline.setSize({5.f, std::sqrt(dx*dx + dy*dy)}); //pythagorean theorem.
+        dragline.setRotation(std::atan2(dy,dx)*(180.f/3.141592653f) - 90.f); // radian-to-degree conversion is 180/PI
+        // -90-degrees to actually match the mouse (angle 0 is straight up, positive rotations are counter-clockwise)
+        
+        //mainWindow.clear(); // not actually necessary since overlay always overdraws dragline
+        mainWindow.draw(overlay); // pretty cool if you disable this
+        mainWindow.draw(dragline);
+        mainWindow.display();
+    }
+    
+    return;
 }
 
 
@@ -196,7 +231,8 @@ int main(int argc, char** argv)
                             if (component.isOutputPinClicked(mousePosition)) {
                                 identifier = std::format("{} output-pin", component.UUID());
                                 hitboxFound = true; selectedComponent = &component;
-                                component.HighlightOutputPin(); break;
+                                component.HighlightOutputPin(); mainWindow.draw(component); // draw the highlight before screencap
+                                MouseDragLoop(mainWindow, mousePosition, component.ReadState()); break;
                             } else if(component.inputHitboxClicked(mousePosition)) {
                                 identifier = std::format("{} input-pin", component.UUID());
                                 hitboxFound = true; selectedComponent = nullptr; break;
