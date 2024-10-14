@@ -82,37 +82,47 @@ class Wire: public sf::Drawable
         const sf::Vector2f halfDist {dist/2.f};
         constexpr float halfThick {thickness/2.f};
         const float extraLength {(dist.y > 0.f)? thickness : -thickness}; // adjustment must be relative to y-direction
+        const float hoffset{ (7.f * (1-pin->index)) + (((dist.x > 0.f)!=(dist.y > 0.f))? 2.f : -2.f) };
+        // offset by target pin, and an additional directionally-based offset to avoid overlaps between wires going opposite directions
         
         // if distance is primarily vertical, split the distance into two vertical components and one horizontal
-        if (std::abs(dist.x) < std::abs(dist.y))
+        // also use vertical layout for backwards connections, to prevent the wires from cutting across the gates and linking from the wrong side.
+        if ((std::abs(dist.x) < std::abs(dist.y)) || (dist.x < 0.f))
         {
             sf::RectangleShape& verticalOne = lines.emplace_back(sf::Vector2f{thickness, halfDist.y});
             verticalOne.setOrigin({halfThick, 0});
             verticalOne.setPosition(source.getPosition()); // hitbox is positioned at the end of the lead
+            verticalOne.move(-hoffset, 0);
             
-            sf::RectangleShape& horizontal = lines.emplace_back(sf::Vector2f{dist.x+halfThick, thickness});
+            sf::RectangleShape& horizontal = lines.emplace_back(sf::Vector2f{dist.x+halfThick-hoffset, thickness});
             horizontal.setOrigin({0, halfThick}); // don't change X-origin; it complicates alignment
-            horizontal.setPosition(source.getPosition()); horizontal.move({-halfThick, halfDist.y}); // aligning to body of gate
+            horizontal.setPosition(verticalOne.getPosition()); horizontal.move({-halfThick, halfDist.y}); // aligning to body of gate
             
             sf::RectangleShape& verticalTwo = lines.emplace_back(sf::Vector2f{thickness, halfDist.y+extraLength});
             verticalTwo.setOrigin({halfThick, 0});
-            verticalTwo.setPosition(horizontal.getPosition()); verticalTwo.move({dist.x, -extraLength/2.f});
+            verticalTwo.setPosition(horizontal.getPosition()); verticalTwo.move({dist.x-hoffset, -extraLength/2.f});
+            
+            sf::RectangleShape& gap = lines.emplace_back(sf::Vector2f{hoffset*2.f, thickness});
+            gap.setOrigin({0, halfThick});
+            gap.setPosition(drain->getPosition());
+            gap.move(-hoffset*2.f, 0);
+            gap.setOutlineThickness(-1);
             
             horizontal.setOutlineThickness(-1); verticalOne.setOutlineThickness(-1); verticalTwo.setOutlineThickness(-1);
         } 
         else //if distance is primarily horizontal, split into two horizontal components instead of two vertical
         {
-            sf::RectangleShape& horizontal = lines.emplace_back(sf::Vector2f{halfDist.x, thickness});
+            sf::RectangleShape& horizontal = lines.emplace_back(sf::Vector2f{halfDist.x-hoffset, thickness});
             horizontal.setOrigin({0, halfThick}); // don't change X-origin; it complicates alignment
             horizontal.setPosition(source.getPosition());
             
             sf::RectangleShape& vertical = lines.emplace_back(sf::Vector2f{thickness, dist.y+extraLength});
             vertical.setOrigin({halfThick, 0});
-            vertical.setPosition(horizontal.getPosition()); vertical.move({halfDist.x, -extraLength/2.f});
+            vertical.setPosition(horizontal.getPosition()); vertical.move({halfDist.x-hoffset, -extraLength/2.f});
             
-            sf::RectangleShape& horizontalTwo = lines.emplace_back(sf::Vector2f{halfDist.x, thickness});
+            sf::RectangleShape& horizontalTwo = lines.emplace_back(sf::Vector2f{halfDist.x+(hoffset*2.f), thickness});
             horizontalTwo.setOrigin({0, halfThick});
-            horizontalTwo.setPosition(source.getPosition()); horizontalTwo.move({halfDist.x, dist.y});
+            horizontalTwo.setPosition(source.getPosition()); horizontalTwo.move({halfDist.x-hoffset, dist.y});
             
             vertical.setOutlineThickness(-1); horizontal.setOutlineThickness(-1); horizontalTwo.setOutlineThickness(-1);
         }
@@ -125,7 +135,9 @@ class Wire: public sf::Drawable
     explicit Wire(const Pin& sourcePin, std::string componentID)
     : source{sourcePin}, parentID{componentID}
     { 
-        lines.reserve(3); //two primary segments + a middle joining segment
+        lines.reserve(4); //two primary segments + a middle joining segment
+        // TODO: exceeding the size specified here during 'LinkTo' causes an abort: 
+        //  "pure virtual method called. terminate called without an exception. Aborted (core dumped)"
     }
 };
 
