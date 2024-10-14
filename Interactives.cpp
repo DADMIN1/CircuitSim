@@ -1,6 +1,9 @@
 #include "Interactives.hpp"
 
 
+bool Pin::hideConnectedHitboxes{true}; // static
+
+
 void MakeGlobalIO(std::vector<Component>& components, bool isInput, std::vector<bool> inputBits)
 {
     if (!isInput) { for(int i{0}; i<8; ++i) inputBits.push_back(false); }

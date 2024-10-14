@@ -23,15 +23,18 @@ struct Pin: sf::RectangleShape
     const std::string UUID; // component UUID + index (index counts from 1 for inputs)
     //sf::Text label;
     
+    static bool hideConnectedHitboxes; // don't display hitboxes for connected pins
+    
     bool BelongsTo(std::string parentUID) const {
         return (UUID == (parentUID + '#' + std::to_string(index+mtype)));
     }
     
     static constexpr float size = 25.f;
-    Pin(Type T, int I, std::string S): sf::RectangleShape{{size, size}}, 
+    Pin(Type T, int I, std::string S): sf::RectangleShape{{size*2.f, size}}, 
        mtype{T}, index{I}, UUID{ S + '#' + std::to_string(index+mtype)}
     {
-        setOrigin(size/2.f, size/2.f);
+        const float xorigin{ (mtype == Input)? size/2.f : size*1.5f }; // align left for inputs, right for outputs
+        setOrigin(xorigin, size/2.f);
         setFillColor(sf::Color::Transparent);
         setOutlineColor(sf::Color::White);
         setOutlineThickness(-1.f);
@@ -168,7 +171,7 @@ class Component: public sf::Drawable
         return (spriteContains || ouputsContains || inputsContains);
     }
     
-    void HighlightOutputPin() { outputs[0].setFillColor(sf::Color(0xFFFFFF77)); }
+    void HighlightOutputPin(bool on=true) { outputs[0].setFillColor(on? sf::Color(0xFFFFFF77) : sf::Color::Transparent); }
     
     void UpdateLeadColors()
     { 
@@ -185,6 +188,14 @@ class Component: public sf::Drawable
         leads.back().setFillColor( (outputs[0].state? sf::Color::Red : sf::Color::Black)); //back lead is the output line
         leads.back().setOutlineColor(outputs[0].state?sf::Color(0x000000AA) : sf::Color(0xFFFFFFAA));
         outputs[0].setFillColor(sf::Color::Transparent);
+        
+        //if(!hideConnectedHitboxes) return;
+        // hiding hitboxes on connected pins
+        for (std::vector<Pin>* pinvec: {&inputs, &outputs}) {
+            for (Pin& pin: *pinvec) { 
+                pin.setOutlineThickness((Pin::hideConnectedHitboxes && pin.isConnected)? 0.f : -1.f); 
+            }
+        }
         
         return;
     }

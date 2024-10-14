@@ -213,6 +213,12 @@ int main(int argc, char** argv)
                         }
                         break;
                         
+                        case sf::Keyboard::H:
+                            Pin::hideConnectedHitboxes = !Pin::hideConnectedHitboxes;
+                            std::cout << "\nconnected pins' hitboxes: " << (Pin::hideConnectedHitboxes? "hidden" : "shown") << "\n\n";
+                            for (Component& component: components) { component.UpdateLeadColors(); }
+                        break;
+                        
                         default: break;
                     }
                 }
@@ -239,7 +245,8 @@ int main(int argc, char** argv)
                                 identifier = std::format("{} output-pin", component.UUID());
                                 hitboxFound = true; selectedComponent = &component;
                                 component.HighlightOutputPin(); mainWindow.draw(component); // draw the highlight before screencap
-                                MouseDragLoop(mainWindow, mousePosition, component.ReadState()); break;
+                                MouseDragLoop(mainWindow, mousePosition, component.ReadState());
+                                component.HighlightOutputPin(false); break;
                             } else if(component.inputHitboxClicked(mousePosition)) {
                                 identifier = std::format("{} input-pin", component.UUID());
                                 hitboxFound = true; selectedComponent = nullptr; break;
