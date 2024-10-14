@@ -13,7 +13,8 @@ void MakeGlobalIO(std::vector<Component>& components, bool isInput, std::vector<
         component.isGlobalIn  = isInput;
         component.isGlobalOut = !isInput;
         
-        int Xoffset = (isInput? -96: 1024-32); // set unused hitbox offscreen
+        //int Xoffset = (isInput? -96: 1024-32); // set unused hitbox offscreen
+        int Xoffset = (isInput? -72: 1024-36); // less offscreen
         component.SetPosition(Xoffset, I*(1024.f/(inputBits.size()+1)));
         
         std::vector<Pin>& pins {(isInput? component.inputs : component.outputs)};

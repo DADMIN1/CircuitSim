@@ -94,6 +94,7 @@ int main(int argc, char** argv)
     if(status != 0) { return status; }
     
     SelectorWindow selectorWindow (spriteScale);
+    selectorWindow.setPosition({int(mainWindow.getPosition().x + mainWindow.getSize().x + 45), 0});
     
     sf::Sprite heldSprite = TextureStorage::GetSprite(selectorWindow.selection);
     std::vector<Component> components;
@@ -201,7 +202,13 @@ int main(int argc, char** argv)
                                 std::vector<Component> OutputBits{};
                                 for(const Component& component: components) 
                                 { if(component.isGlobalOut) OutputBits.push_back(component); }
-                                std::cout << "\nGlobal Output = " << ReadIO(OutputBits) << "\n\n";
+                                
+                                // don't reprint output if it hasn't changed
+                                static int prevResult {-1};
+                                const int result = ReadIO(OutputBits);
+                                if (result == prevResult) break;
+                                std::cout << "\nGlobal Output = " << result << "\n\n";
+                                prevResult = result;
                             }
                         }
                         break;

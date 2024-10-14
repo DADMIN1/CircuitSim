@@ -26,7 +26,13 @@ SelectorWindow::SelectorWindow(float scale): spriteScale{scale}
     const int windowSize = static_cast<int>(1024.f*scale);
     const sf::Vector2f spriteSize {windowSize/2.f, windowSize/4.f};
     
-    create(sf::VideoMode(windowSize, windowSize), "SelectorWindow", sf::Style::Titlebar);
+    #ifdef SELECTORWINDOW_DEBUG
+      const int hWinSize{windowSize*2};
+    #else
+      const int hWinSize{windowSize};
+    #endif
+    
+    create(sf::VideoMode(hWinSize, windowSize), "SelectorWindow", sf::Style::Titlebar);
     setVerticalSyncEnabled(usingVsync);
     setFramerateLimit(framerateCap);
     

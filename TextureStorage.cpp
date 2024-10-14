@@ -31,7 +31,12 @@ int TextureStorage::Init(float scale)
             sf::Sprite& sprite = sprites[i+int(offset*LogicGate::LAST_ENUM)];
             sprite = sf::Sprite{spriteSheetTexture, sf::IntRect(X+(imgsz*offset), Y, W, H)};
             sprite.setScale(scale, scale);
-            sprite.setPosition(X*scale + (imgsz*offset), Y*scale);
+            #ifdef SELECTORWINDOW_DEBUG
+              const float xOffset{float(imgsz*offset)/4.f}; // division by four is required because window width (and h-scaling) also doubles
+            #else
+              const float xOffset{float(imgsz*offset)};
+            #endif
+            sprite.setPosition(X*scale + xOffset, Y*scale);
         }
     }
     

@@ -9,6 +9,11 @@
 #include "LogicGate.hpp"
 
 
+// widens selector window to display red sprites for debug
+#define SELECTORWINDOW_DEBUG
+#undef SELECTORWINDOW_DEBUG
+
+
 struct TextureStorage
 {
     static sf::Image spriteSheet;

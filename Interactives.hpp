@@ -170,13 +170,23 @@ class Component: public sf::Drawable
     
     void HighlightOutputPin() { outputs[0].setFillColor(sf::Color(0xFFFFFF77)); }
     
-    inline void UpdateLeadColors() { 
+    void UpdateLeadColors()
+    { 
+        // updating sprite texture to match state
+        const auto oldPosition = sprite.getPosition();
+        sprite = TextureStorage::GetSprite(gate.mType, gate.state);
+        sprite.setPosition(oldPosition);
+        // for some reason 'setTexture' doesn't work
+        //sprite.setTexture(*TextureStorage::GetSprite(gate.mType, gate.state).getTexture());
+        
         for (int I{0}; I < int(inputs.size()); ++I) {
             leads[I].setOutlineColor(inputs[I].state? sf::Color(0x000000AA) : sf::Color(0xFFFFFFAA));
             leads[I].setFillColor( ( inputs[I].state? sf::Color::Red : sf::Color::Black)); }
         leads.back().setFillColor( (outputs[0].state? sf::Color::Red : sf::Color::Black)); //back lead is the output line
         leads.back().setOutlineColor(outputs[0].state?sf::Color(0x000000AA) : sf::Color(0xFFFFFFAA));
         outputs[0].setFillColor(sf::Color::Transparent);
+        
+        return;
     }
     
     // implementing the SFML 'draw' function for this class
@@ -196,8 +206,6 @@ class Component: public sf::Drawable
         if (oldState != gate.Update(inputs[0].state, inputs[1].state)) 
         {
             outputs[0].state = gate.state;
-            // TODO: figure out why sprites aren't updating to red texture.
-            sprite.setTexture(*TextureStorage::GetSprite(gate.mType, gate.state).getTexture());
             for(auto& [s,wire]: wires) { wire.PropagateState(); }
         }
         UpdateLeadColors();
