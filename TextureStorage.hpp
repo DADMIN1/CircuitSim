@@ -12,14 +12,14 @@
 struct TextureStorage
 {
     static sf::Image spriteSheet;
-    static sf::Image spriteSheetRed;
     static sf::Texture spriteSheetTexture;
-    static sf::Texture spriteSheetTextureRed;
-    static std::array<sf::Sprite, LogicGate::LAST_ENUM> sprites;
-    static std::array<sf::Sprite, LogicGate::LAST_ENUM> spritesRed;
+    static std::array<sf::Sprite, LogicGate::LAST_ENUM*2> sprites;
     
-    static sf::Sprite GetSprite(LogicGate::OpType T, bool isRed=false) { return (isRed? spritesRed[T] : sprites[T]); }
-    static int Init(float scale=1.f); // returns non-zero on failure
+    static sf::Sprite GetSprite(LogicGate::OpType T, bool isRed=false) { 
+        return (isRed? sprites[T+LogicGate::LAST_ENUM] : sprites[T]); 
+    }
+    
+    static int Init(float scale=1.0f); // returns non-zero on failure
 };
 
 

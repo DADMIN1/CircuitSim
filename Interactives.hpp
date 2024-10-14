@@ -192,10 +192,11 @@ class Component: public sf::Drawable
     void PropagateLogic()
     {
         outputs[0].isConnected = !wires.empty();
-        bool oldState = gate.state;
+        const bool oldState = gate.state;
         if (oldState != gate.Update(inputs[0].state, inputs[1].state)) 
         {
             outputs[0].state = gate.state;
+            // TODO: figure out why sprites aren't updating to red texture.
             sprite.setTexture(*TextureStorage::GetSprite(gate.mType, gate.state).getTexture());
             for(auto& [s,wire]: wires) { wire.PropagateState(); }
         }
