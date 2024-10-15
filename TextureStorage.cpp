@@ -15,6 +15,7 @@ int TextureStorage::Init(float scale)
     if(!spriteSheet.loadFromFile(spriteSheetPath)) {
         std::cerr << "Failed to load image: '" << spriteSheetPath << "'\n Exiting.\n"; return 1;
     }
+    spriteSheetTexture.setSmooth(true);
     if(!spriteSheetTexture.loadFromImage(spriteSheet /*, sf::IntRect(0, 0, 1024, 1024)*/)) {
         std::cout << "Failed to set texture!\n Exiting.\n"; return 2;
     }

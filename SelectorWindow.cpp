@@ -32,7 +32,8 @@ SelectorWindow::SelectorWindow(float scale): spriteScale{scale}
       const int hWinSize{windowSize};
     #endif
     
-    create(sf::VideoMode(hWinSize, windowSize), "SelectorWindow", sf::Style::Titlebar);
+    sf::ContextSettings contextSettings{}; contextSettings.antialiasingLevel = 16;
+    create(sf::VideoMode(hWinSize, windowSize), "SelectorWindow", sf::Style::Titlebar, contextSettings);
     setVerticalSyncEnabled(usingVsync);
     setFramerateLimit(framerateCap);
     

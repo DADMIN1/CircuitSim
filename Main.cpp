@@ -17,7 +17,7 @@
 
 bool usingVsync {false};
 extern constexpr unsigned int framerateCap{300};
-extern const sf::Color backgroundColor{0x999999FF};
+extern const sf::Color backgroundColor{0x808088FF};
 constexpr float spriteScale = 0.25f;
 
 
@@ -44,7 +44,7 @@ void PrintProgramConfiguration()
 void MouseDragLoop(sf::RenderWindow& mainWindow, sf::Vector2f initalPosition, bool activeColor)
 {
     auto [szx, szy] = mainWindow.getSize();
-    sf::Texture overlayTexture{}; overlayTexture.create(szx, szy);
+    sf::Texture overlayTexture{}; overlayTexture.create(szx, szy); overlayTexture.setSmooth(false);
     //overlayTexture.loadFromImage(mainWindow.capture()); //deprecated
     overlayTexture.update(mainWindow); //captures the window
     sf::Sprite overlay{overlayTexture};
@@ -85,16 +85,25 @@ int main(int argc, char** argv)
     
     PrintProgramConfiguration();
     
-    sf::RenderWindow mainWindow (sf::VideoMode(1024, 1024), "Circuit Simulator", sf::Style::Close);
+    sf::ContextSettings contextSettings{}; contextSettings.antialiasingLevel = 16; // 16 is highest
+    sf::RenderWindow mainWindow (sf::VideoMode(1024, 1024), "Circuit Simulator", sf::Style::Close, contextSettings);
     mainWindow.setFramerateLimit(framerateCap);
     mainWindow.setVerticalSyncEnabled(usingVsync);
     mainWindow.setPosition({2600, 0});
     
+    std::cout << "antialiasing level: " << mainWindow.getSettings().antialiasingLevel << "\n\n";
+    
     int status = TextureStorage::Init(spriteScale);
     if(status != 0) { return status; }
     
-    SelectorWindow selectorWindow (spriteScale);
+    SelectorWindow selectorWindow(spriteScale);
     selectorWindow.setPosition({int(mainWindow.getPosition().x + mainWindow.getSize().x + 45), 0});
+    
+    // trying to regain keyboard/window focus from selectorWindow on startup
+    mainWindow.requestFocus();
+    mainWindow.setVisible(false);
+    mainWindow.setVisible(true);
+    mainWindow.requestFocus();
     
     sf::Sprite heldSprite = TextureStorage::GetSprite(selectorWindow.selection);
     std::vector<Component> components;
@@ -214,6 +223,12 @@ int main(int argc, char** argv)
                         break;
                         
                         case sf::Keyboard::H:
+                            Pin::displayHitboxes = !Pin::displayHitboxes;
+                            std::cout << "\npins' hitboxes: " << (Pin::displayHitboxes? "shown" : "hidden") << "\n\n";
+                            for (Component& component: components) { component.UpdateLeadColors(); }
+                        break;
+                        
+                        case sf::Keyboard::J:
                             Pin::hideConnectedHitboxes = !Pin::hideConnectedHitboxes;
                             std::cout << "\nconnected pins' hitboxes: " << (Pin::hideConnectedHitboxes? "hidden" : "shown") << "\n\n";
                             for (Component& component: components) { component.UpdateLeadColors(); }
