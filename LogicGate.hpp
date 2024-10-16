@@ -33,8 +33,9 @@ class LogicGate
         }
     }
     
-    bool Update(bool A) { state = ((mType == NOT)? !A : A); return state; } // unary
-    bool Update(bool A, bool B) { state = LogicGate::Eval(mType, A, B); return state; } // binary
+    // updates states from inputs, then returns true if it's state changed
+    bool Update(bool A) { bool old{state};  state = ((mType == NOT)? !A : A); return (old==state); } // unary
+    bool Update(bool A, bool B) { bool old{state}; state = Eval(mType, A, B); return (old==state); } // binary
     
     static std::string GetName(OpType T) {
         switch(T) {
@@ -47,6 +48,7 @@ class LogicGate
     }
     
     std::string GetName() const { return GetName(mType); }
+    static std::string GetNextUUID(OpType op) { return GetName(op) + '_' + std::to_string(nextID); }
     
     LogicGate(OpType T): UUID{nextID++}, mType{T}
     { ; }

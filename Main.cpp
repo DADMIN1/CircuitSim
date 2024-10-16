@@ -8,6 +8,7 @@
 #include "TextureStorage.hpp"
 #include "SelectorWindow.hpp"
 #include "Interactives.hpp"
+#include "ComponentMap.hpp"
 
 
 //create a component for each gate on startup and validate pincount
@@ -99,41 +100,39 @@ int main(int argc, char** argv)
     SelectorWindow selectorWindow(spriteScale);
     selectorWindow.setPosition({int(mainWindow.getPosition().x + mainWindow.getSize().x + 45), 0});
     
+    #ifndef _ISDEBUG
     // trying to regain keyboard/window focus from selectorWindow on startup
     mainWindow.requestFocus();
     mainWindow.setVisible(false);
     mainWindow.setVisible(true);
     mainWindow.requestFocus();
+    #endif
     
     sf::Sprite heldSprite = TextureStorage::GetSprite(selectorWindow.selection);
-    std::vector<Component> components;
-    components.reserve(127);
+    ComponentMap components{};
     Component* selectedComponent{nullptr};
     
     #ifdef CHECK_COMPONENT_PINCOUNT
       bool tooManyInputs{false};
       for (int i{1}; i < LogicGate::LAST_ENUM; ++i) {
-          Component& component = components.emplace_back(LogicGate::OpType(i));
+          Component& component = components.Push(LogicGate::OpType(i));
           component.SetPosition(i*96, i*64);
           std::cout << component.Name() << std::format(": {} inputs", component.GetPinCount()) << '\n';
           if(component.GetPinCount() > 2) tooManyInputs = true;
           
           // staggered
-          Component& componentTwo = components.emplace_back(LogicGate::OpType(i));
+          Component& componentTwo = components.Push(LogicGate::OpType(i));
           componentTwo.SetPosition(i*96, ((i-1)*64 + 512));
       }
       if(tooManyInputs) { std::cerr << "\nError: #Inputs > 2 \n Exiting.\n"; return 3; }
       std::cout << "\n";
     #endif
     
-    MakeGlobalIO(components, true, std::vector<bool>{ true, false, /*true, false, true, false, true, false,*/ } );
-    MakeGlobalIO(components, false, {});
-    
-    {
-        std::vector<Component> InputBits{};
-        for(const Component& component: components) { if(component.isGlobalIn) InputBits.push_back(component); }
-        std::cout << "\nGlobal Input = " << ReadIO(InputBits ) << "\n\n";
-    }
+    std::vector<Component> globalInputs{};
+    std::vector<Component> globalOutput{};
+    MakeGlobalIO(globalInputs, true, std::vector<bool>{ true, false, /*true, false, true, false, true, false,*/ } );
+    MakeGlobalIO(globalOutput, false, {});
+    std::cout << "\nGlobal Input = " << ReadIO(globalInputs) << "\n\n";
     
     // printing truth tables
     #define EVALTEST(a, b) std::cout << std::boolalpha << \
@@ -205,16 +204,14 @@ int main(int argc, char** argv)
                         
                         case sf::Keyboard::Space:
                         {
-                            for(Component& component: components) { component.PropagateLogic(); }
+                            for(Component& component: globalInputs) { component.PropagateLogic(); }
+                            components.ForEach([](Component& component) { component.PropagateLogic(); });
+                            for(Component& component: globalOutput) { component.PropagateLogic(); }
                             
                             {
-                                std::vector<Component> OutputBits{};
-                                for(const Component& component: components) 
-                                { if(component.isGlobalOut) OutputBits.push_back(component); }
-                                
                                 // don't reprint output if it hasn't changed
                                 static int prevResult {-1};
-                                const int result = ReadIO(OutputBits);
+                                const int result = ReadIO(globalOutput);
                                 if (result == prevResult) break;
                                 std::cout << "\nGlobal Output = " << result << "\n\n";
                                 prevResult = result;
@@ -225,13 +222,19 @@ int main(int argc, char** argv)
                         case sf::Keyboard::H:
                             Pin::displayHitboxes = !Pin::displayHitboxes;
                             std::cout << "\npins' hitboxes: " << (Pin::displayHitboxes? "shown" : "hidden") << "\n\n";
-                            for (Component& component: components) { component.UpdateLeadColors(); }
+                            
+                            for(Component& component: globalInputs) { component.UpdateLeadColors(); }
+                            for(Component& component: globalOutput) { component.UpdateLeadColors(); }
+                            components.ForEach([](Component& component){ component.UpdateLeadColors(); });
                         break;
                         
                         case sf::Keyboard::J:
                             Pin::hideConnectedHitboxes = !Pin::hideConnectedHitboxes;
                             std::cout << "\nconnected pins' hitboxes: " << (Pin::hideConnectedHitboxes? "hidden" : "shown") << "\n\n";
-                            for (Component& component: components) { component.UpdateLeadColors(); }
+                            
+                            for(Component& component: globalInputs) { component.UpdateLeadColors(); }
+                            for(Component& component: globalOutput) { component.UpdateLeadColors(); }
+                            components.ForEach([](Component& component){ component.UpdateLeadColors(); });
                         break;
                         
                         default: break;
@@ -240,40 +243,93 @@ int main(int argc, char** argv)
                 break;
                 
                 case sf::Event::MouseWheelScrolled:
+                    if(!selectorWindow.isOpen()) { //reopen window and minimize it
+                        selectorWindow.Create(); selectorWindow.setVisible(false);
+                    }
                     selectorWindow.SetSelection(
                         selectorWindow.NextSelection((event.mouseWheelScroll.delta >= 0), false)
                     );
                 break;
                 
                 case sf::Event::MouseButtonPressed:
-                    if (selectorWindow.selection > 0) // place component if it's not 'EQ'
-                    { components.emplace_back(selectorWindow.selection, heldSprite); }
-                    else
+                {
+                    switch(event.mouseButton.button)
                     {
-                        bool hitboxFound{false};
-                        std::string identifier;
-                        const sf::Vector2f mousePosition{ sf::Mouse::getPosition(mainWindow) };
-                        
-                        for (Component& component: components)
+                        case sf::Mouse::Button::Left:
+                        if (selectorWindow.selection > 0) // place component if it's not 'EQ'
+                        { components.Push(selectorWindow.selection, heldSprite); }
+                        else
                         {
-                            if (component.isOutputPinClicked(mousePosition)) {
-                                identifier = std::format("{} output-pin", component.UUID());
-                                hitboxFound = true; selectedComponent = &component;
-                                component.HighlightOutputPin(); mainWindow.draw(component); // draw the highlight before screencap
-                                MouseDragLoop(mainWindow, mousePosition, component.ReadState());
-                                component.HighlightOutputPin(false); break;
-                            } else if(component.inputHitboxClicked(mousePosition)) {
-                                identifier = std::format("{} input-pin", component.UUID());
-                                hitboxFound = true; selectedComponent = nullptr; break;
-                            } else if(component.ContainsCoord(mousePosition)) {
-                                identifier = std::format("{}", component.UUID());
-                                hitboxFound = true; selectedComponent = nullptr; break;
-                            }
+                            bool hitboxFound{false};
+                            std::string identifier;
+                            const sf::Vector2f mousePosition{ sf::Mouse::getPosition(mainWindow) };
+                            
+                            auto lambda = [&](Component& component)
+                            {
+                                if (component.isOutputPinClicked(mousePosition)) {
+                                    identifier = std::format("{} output-pin", component.UUID());
+                                    hitboxFound = true; selectedComponent = &component;
+                                    component.HighlightOutputPin(); mainWindow.draw(component); // draw the highlight before screencap
+                                    MouseDragLoop(mainWindow, mousePosition, component.ReadState());
+                                    component.HighlightOutputPin(false); ComponentMap::Break(); return true;
+                                } else if(component.inputHitboxClicked(mousePosition)) {
+                                    identifier = std::format("{} input-pin", component.UUID());
+                                    hitboxFound = true; selectedComponent = nullptr; ComponentMap::Break(); return true;
+                                } else if(component.ContainsCoord(mousePosition)) {
+                                    #ifdef _ISDEBUG
+                                    component.PrintConnections();
+                                    #endif
+                                    identifier = std::format("{}", component.UUID());
+                                    hitboxFound = true; selectedComponent = nullptr; ComponentMap::Break(); return true;
+                                }
+                                return false;
+                            };
+                            for(Component& component: globalInputs) { if(lambda(component)) goto endSearch; }
+                            for(Component& component: globalOutput) { if(lambda(component)) goto endSearch; }
+                            components.ForEach(lambda);
+                            
+                            endSearch:
+                            if (!hitboxFound) identifier = "empty click";
+                            std::cout << std::format("{} @({}, {})", identifier, mousePosition.x, mousePosition.y);
+                            if (!selectedComponent) std::cout << '\n';
                         }
-                        if (!hitboxFound) identifier = "empty click";
-                        std::cout << std::format("{} @({}, {})", identifier, mousePosition.x, mousePosition.y);
-                        if (!selectedComponent) std::cout << '\n';
+                        break;
+                        
+                        case sf::Mouse::Button::Right:
+                        {
+                            bool hitboxFound{false};
+                            const sf::Vector2f mousePosition{ sf::Mouse::getPosition(mainWindow) };
+                            auto lambda = [&](Component& component)
+                            {
+                                if(component.ContainsCoord(mousePosition)) {
+                                    std::string identifier = std::format("{}", component.UUID());
+                                    std::cout << std::format("disconnecting: {} @({}, {})\n", identifier, mousePosition.x, mousePosition.y);
+                                    #ifdef _ISDEBUG
+                                    component.PrintConnections();
+                                    #endif
+                                    component.RemoveAllConnections();
+                                    selectedComponent = nullptr;
+                                    //selectedComponent = &component;
+                                    hitboxFound = true; ComponentMap::Break(); return true;
+                                } return false;
+                            };
+                            
+                            for(Component& component: globalInputs) { if(lambda(component)) goto endSearch2; }
+                            for(Component& component: globalOutput) { if(lambda(component)) goto endSearch2; }
+                            components.ForEach(lambda);
+                            
+                            endSearch2:
+                            if (!hitboxFound) { std::cout << "empty right-click\n"; break; }
+                            // don't need to do this for inputs because their state never changes
+                            for(Component& component: globalInputs) { component.Update(); component.PropagateLogic(); component.UpdateLeadColors(); }
+                            for(Component& component: globalOutput) { component.Update(); component.PropagateLogic(); component.UpdateLeadColors(); }
+                            components.ForEach([](Component& component){ component.Update(); component.PropagateLogic(); component.UpdateLeadColors(); });
+                        }
+                        break;
+                        
+                        default: break;
                     }
+                }
                 break;
                 
                 case sf::Event::MouseButtonReleased:
@@ -283,7 +339,7 @@ int main(int argc, char** argv)
                     
                     bool hitboxFound{false};
                     const sf::Vector2f mousePosition{ sf::Mouse::getPosition(mainWindow) };
-                    for (Component& component: components) {
+                    auto lambda = [&](Component& component) {
                         if (component.inputHitboxClicked(mousePosition)) {
                             std::cout << std::format(" -> {} input-pin @({}, {})\n",
                                 component.UUID(), mousePosition.x, mousePosition.y);
@@ -291,11 +347,18 @@ int main(int argc, char** argv)
                             selectedComponent->CreateConnection(&component, component.getClickedInput(mousePosition));
                             selectedComponent->PropagateLogic();
                             component.PropagateLogic();
-                            break;
-                        }
-                    }
+                            ComponentMap::Break(); return true;
+                        } return false;
+                    };
+                    
+                    for(Component& component: globalInputs) { if(lambda(component)) goto endSearch3; }
+                    for(Component& component: globalOutput) { if(lambda(component)) goto endSearch3; }
+                    components.ForEach(lambda);
+                    
+                    endSearch3:
                     if (!hitboxFound) std::cout << '\n'; // flushing held output
                     selectedComponent = nullptr;
+                    if(hitboxFound) components.ForEach([](Component& component){ component.Update(); component.PropagateLogic(); component.UpdateLeadColors(); });
                 }
                 break;
                 
@@ -305,7 +368,9 @@ int main(int argc, char** argv)
         
         mainWindow.clear(backgroundColor);
         
-        for(const Component& component: components) { mainWindow.draw(component); }
+        for(const Component& component: globalInputs) { mainWindow.draw(component); }
+        for(const Component& component: globalOutput) { mainWindow.draw(component); }
+        components.ForEach([&mainWindow](const Component& component){ mainWindow.draw(component); });
         
         if (selectorWindow.selection > 0)
         {

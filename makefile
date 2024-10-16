@@ -4,7 +4,7 @@ MAKEFLAGS += -j8 --output-sync=target --warn-undefined-variables
 ifndef CXX
 CXX := g++
 endif
-CXXFLAGS := -pipe -std=c++23 -fdiagnostics-color=always
+CXXFLAGS := -pipe -std=c++23 -fdiagnostics-color=always -frecord-gcc-switches
 LDFLAGS := -lsfml-system -lsfml-graphics -lsfml-window
 WARNFLAGS := -Wall -Wextra -Wpedantic -fmax-errors=1
 
@@ -12,7 +12,9 @@ WARNFLAGS := -Wall -Wextra -Wpedantic -fmax-errors=1
 ifeq (debug, $(filter debug, $(MAKECMDGOALS)))
 target_executable = circuitsym_dbg
 OBJECTFILE_DIR = build/objects_dbg
-CXXFLAGS += -g -Og
+CXXFLAGS += -ggdb3 -Og -D_ISDEBUG
+# '-frecord-gcc-switches' writes info into the object files
+# '-grecord-gcc-switches' writes info into the DWARF sections, and is enabled by default.
 else
 target_executable = circuitsym
 OBJECTFILE_DIR = build/objects

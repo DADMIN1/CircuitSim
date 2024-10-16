@@ -1,5 +1,9 @@
 #include "Interactives.hpp"
 
+#include <iostream>
+#include <cassert>
+#include <format>
+
 
 // static members
 bool Pin::displayHitboxes{true};
@@ -65,6 +69,41 @@ void Wire::LinkTo(Pin* pin)
 }
 
 
+std::string PrintPin(const Pin& pin)
+{
+    std::string info = std::format(
+         "\tpin: {} @ {}{} \n"
+        "\ttype: {} | isConnected: {} | state: {}\n\n",
+        pin.UUID, pin.parent->UUID(), (pin.BelongsTo(pin.parent->UUID())? "" : "(BADMATCH)"),
+        ((pin.mtype==Pin::Input)? " Input" : "Output"), pin.isConnected, pin.state
+    );
+    return info;
+}
+
+
+void Component::PrintConnections()
+{
+    std::cout << UUID();
+    if(isGlobalIn) std::cout  << " (GLOBAL-INPUT)";
+    if(isGlobalOut) std::cout << " (GLOBAL-OUTPUT)";
+    std::cout << '\n';
+    std::cout << "Connected input pins: \n";
+    for(const Pin& pin: inputs) { 
+        if(!pin.isConnected) continue;
+        std::cout << PrintPin(pin);
+    }
+    
+    std::cout << "\nConnected output pins: \n";
+    for(const Pin& pin: outputs) { 
+        if(!pin.isConnected) continue;
+        std::cout << PrintPin(pin);
+    }
+    
+    // TODO: print incoming and wires
+}
+
+
+
 void Component::SetPosition(float X, float Y)
 {
     sprite.setPosition(X, Y);
@@ -95,8 +134,34 @@ void Component::SetPosition(float X, float Y)
 }
 
 
-void Component::UpdateLeadColors()
-{ 
+// returns false to indicate that the component should be considered inactive
+bool Component::Update()
+{
+    #ifdef _ISDEBUG
+    if ((inputs[0].isConnected || inputs[1].isConnected) == incoming.empty()) {
+        std::cerr << UUID() << " inconsistent state detected. \n";
+        PrintConnections();
+    }
+    #endif
+    
+    if (incoming.empty() && !isGlobalIn) {
+        const auto oldPosition = sprite.getPosition();
+        sprite = TextureStorage::GetSprite(gate.mType, false);
+        sprite.setPosition(oldPosition);
+        
+        for (int I{0}; I < int(inputs.size()); ++I) {
+            leads[I].setFillColor(sf::Color::Black);
+            leads[I].setOutlineColor(sf::Color(0xFFFFFFAA));
+        }
+       
+        if (!outputs[0].isConnected) {
+            leads.back().setFillColor(sf::Color::Black); //back lead is the output line
+            leads.back().setOutlineColor(sf::Color(0xFFFFFFAA));
+        }
+        
+        return false;
+    }
+    
     // updating sprite texture to match state
     const auto oldPosition = sprite.getPosition();
     sprite = TextureStorage::GetSprite(gate.mType, gate.state);
@@ -104,6 +169,11 @@ void Component::UpdateLeadColors()
     // for some reason 'setTexture' doesn't work
     //sprite.setTexture(*TextureStorage::GetSprite(gate.mType, gate.state).getTexture());
     
+    return true;
+}
+
+void Component::UpdateLeadColors()
+{ 
     for (int I{0}; I < int(inputs.size()); ++I) {
         leads[I].setOutlineColor(inputs[I].state? sf::Color(0x000000AA) : sf::Color(0xFFFFFFAA));
         leads[I].setFillColor( ( inputs[I].state? sf::Color::Red : sf::Color::Black)); }
@@ -117,14 +187,26 @@ void Component::UpdateLeadColors()
 
 void Component::PropagateLogic()
 {
+    //if (!Update()) { return; } // never propagate inactive components
     outputs[0].isConnected = !wires.empty();
-    const bool oldState = gate.state;
-    if (oldState != gate.Update(inputs[0].state, inputs[1].state)) 
+    if(incoming.empty() && !isGlobalIn) { // always de-activate unconnected components
+        gate.state = false;
+        outputs[0].state = gate.state;
+        UpdateLeadColors();
+        return;
+    }
+    
+    //if (!(inputs[0].isConnected || inputs[1].isConnected) && !isGlobalIn) return;
+    
+    const bool oldState = outputs[0].state;
+    if(!gate.Update(inputs[0].state, inputs[1].state) // gate changed state due to inputs 
+    || (oldState != gate.state)) // or state mismatch, needs to be updated
     {
         outputs[0].state = gate.state;
         for(auto& [s,wire]: wires) { wire.PropagateState(); }
     }
     UpdateLeadColors();
+    Update();
     return;
 }
 
@@ -132,7 +214,10 @@ void Component::PropagateLogic()
 void Component::CreateConnection(Component* target, Pin* targetPin)
 {
     if(!target || !targetPin) return;
-    if (target == this) return; // disallow self-connections
+    if(target == this) return; // disallow self-connections
+    if(!targetPin->BelongsTo(target->UUID())) {
+        std::cerr << std::format("target-pin: {} does not belong to target: {}\n", targetPin->UUID, target->UUID());
+    }
     
     // check other connections to target, and disconnect them if they go to targetPin
     if (target->incoming.contains(targetPin->UUID)) {
@@ -142,10 +227,59 @@ void Component::CreateConnection(Component* target, Pin* targetPin)
     }
     
     outputs[0].isConnected = true;
+    //targetPin->isConnected = true; //DON'T DO THIS! 'LinkTo' will think this is a conflict and delete this
     target->incoming[targetPin->UUID] = this;
     Wire& wire = wires.emplace(targetPin->UUID, Wire{outputs[0], UUID()}).first->second;
     wire.LinkTo(targetPin);
     PropagateLogic();
+    return;
+}
+
+
+void Component::RemoveAllConnections()
+{
+    for (auto[s, compPtr]: incoming) { 
+        #ifdef _ISDEBUG
+        std::cout << std::format("incoming connection from {}: {} -> {}", compPtr->UUID(), compPtr->outputs[0].UUID, s) << '\n';
+        #endif
+        
+        compPtr->wires.erase(s);
+        compPtr->outputs[0].isConnected = !compPtr->wires.empty();
+        
+        #ifdef _ISDEBUG
+        // assert(compPtr->wires.erase(s) == 1);
+        const int eraseCount = compPtr->wires.erase(s);
+        if (eraseCount != 1) {
+            std::cerr << "warning: erasing input " << s << " did not find 1 element; #found: " << eraseCount << '\n';
+        }
+        #endif
+    }
+    
+    if (!isGlobalIn) {
+        for (Pin& pin: inputs) { pin.state = false; pin.isConnected = false; }
+        incoming.clear();
+        
+        outputs[0].state = false; // always false for disconnencted components
+        gate.Update(false, false);
+    }
+    
+    for (auto&[s, wire]: wires) {
+        if (wire.drain) {
+            wire.drain->state = false;  // after disconnecting the target's input pin should always be non-active
+            wire.drain->isConnected = false;
+            
+            #ifdef _ISDEBUG
+            std::cout << std::format("wire belonging to {}: {} -> {}", wire.parentID, wire.source.UUID, wire.drain->UUID) << '\n';
+            #endif
+            //assert(wire.drain->BelongsTo(wire.drain->parent->UUID())); //fails
+            //wire.drain->parent->incoming.erase(wire.drain->UUID);  // crashes
+        }
+    }
+    
+    wires.clear();
+    outputs[0].isConnected = false;
+    UpdateLeadColors();
+    Update();
     return;
 }
 
@@ -162,7 +296,7 @@ void Component::Init(std::string name)
     
     int numInputs = ((gate.mType <= 1)? 1 : 2);
     for (int I{0}; I < numInputs; ++I) { 
-        Pin& pin = inputs.emplace_back(Pin::Input, I, UUID());
+        Pin& pin = inputs.emplace_back(Pin::Input, I, this, UUID());
         sf::RectangleShape& lead = leads.emplace_back(sf::Vector2f{Wire::leadLength, Wire::thickness});
         lead.setFillColor(sf::Color::Black);
         lead.setOutlineColor(sf::Color(0xFFFFFFAA));

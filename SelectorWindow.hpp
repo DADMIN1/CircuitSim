@@ -9,6 +9,8 @@
 
 class SelectorWindow: sf::RenderWindow
 {
+    const int windowSize;
+    
     using OpType = LogicGate::OpType;
     OpType selection;
     float spriteScale;
@@ -19,6 +21,7 @@ class SelectorWindow: sf::RenderWindow
     void SetSelection(OpType);
     void EventLoop();
     void Redraw();
+    void Create();
     SelectorWindow(float spriteScale=1.f);
     
     public:

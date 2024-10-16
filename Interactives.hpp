@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <cassert>
 
 #include <SFML/Graphics/Sprite.hpp>
 #include <SFML/Graphics/RectangleShape.hpp>
@@ -14,13 +15,17 @@
 #include "TextureStorage.hpp"
 
 
+class Component;
+
 struct Pin: sf::RectangleShape
 {
     const enum Type { Output, Input, } mtype;
     const int index; // counting connections for current component. Used to offset wire layouts
+    Component* parent; //TODO: revert this
+    const std::string UUID; // component UUID + index (index counts from 1 for inputs)
+    
     bool isConnected{false};
     bool state{false};
-    const std::string UUID; // component UUID + index (index counts from 1 for inputs)
     //sf::Text label;
     
     static bool displayHitboxes;
@@ -39,8 +44,8 @@ struct Pin: sf::RectangleShape
     }
     
     static constexpr float size = 25.f;
-    Pin(Type T, int I, std::string S): sf::RectangleShape{{size*2.f, size}}, 
-       mtype{T}, index{I}, UUID{ S + '#' + std::to_string(index+mtype)}
+    Pin(Type T, int I, Component* C, std::string S): sf::RectangleShape{{size*2.f, size}}, 
+       mtype{T}, index{I}, parent{C}, UUID{ S + '#' + std::to_string(index+mtype)}
     {
         const float xorigin{ (mtype == Input)? size/2.f : size*1.5f }; // align left for inputs, right for outputs
         setOrigin(xorigin, size/2.f);
@@ -78,6 +83,10 @@ class Wire: public sf::Drawable
     }
     
     void PropagateState() {
+        #ifdef _ISDEBUG
+        assert(source.isConnected);
+        #endif
+        if(!source.isConnected) return;
         if(drain) { drain->state = source.state; }
         UpdateColor();
     }
@@ -91,6 +100,7 @@ class Wire: public sf::Drawable
         lines.reserve(4); //two primary segments + a middle joining segment
         // TODO: exceeding the size specified here during 'LinkTo' causes an abort: 
         //  "pure virtual method called. terminate called without an exception. Aborted (core dumped)"
+        assert(source.BelongsTo(parentID));
     }
 };
 
@@ -136,11 +146,14 @@ class Component: public sf::Drawable
         return (spriteContains || ouputsContains || inputsContains);
     }
     
+    bool Update(); // does some state checks, returns false if the component is inactive
     void SetPosition(float X, float Y);
     void HighlightOutputPin(bool on=true) { outputs[0].setFillColor(on? sf::Color(0xFFFFFF77) : sf::Color::Transparent); }
     void UpdateLeadColors();
     void PropagateLogic();
     void CreateConnection(Component* target, Pin* targetPin);
+    void RemoveAllConnections();
+    void PrintConnections();
     void Init(std::string name="");
     
     // implementing the SFML 'draw' function for this class
@@ -154,7 +167,7 @@ class Component: public sf::Drawable
     }
     
     explicit Component(LogicGate::OpType T, const sf::Sprite& S, std::string name="")
-    : gate{T}, sprite{S}, outputs{{Pin::Output, 0, UUID()}}
+    : gate{T}, sprite{S}, outputs{{Pin::Output, 0, this, UUID()}}
     { Init(name); }
     
     explicit Component(LogicGate::OpType T, std::string name=""):
@@ -162,7 +175,7 @@ class Component: public sf::Drawable
     
     friend void MakeGlobalIO(std::vector<Component>&, bool, std::vector<bool>);
     friend int ReadIO(const std::vector<Component>&);
-    bool ReadState() const { return gate.state; }
+    bool ReadState() const { if(incoming.empty() && !isGlobalIn) return false; return gate.state; }
 };
 
 void MakeGlobalIO(std::vector<Component>& outvec, bool isInput, std::vector<bool> inputBits);

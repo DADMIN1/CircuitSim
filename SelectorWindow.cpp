@@ -21,21 +21,25 @@ void SelectorWindow::Redraw()
 }
 
 
-SelectorWindow::SelectorWindow(float scale): spriteScale{scale}
+void SelectorWindow::Create()
 {
-    const int windowSize = static_cast<int>(1024.f*scale);
-    const sf::Vector2f spriteSize {windowSize/2.f, windowSize/4.f};
-    
     #ifdef SELECTORWINDOW_DEBUG
-      const int hWinSize{windowSize*2};
+    const int hWinSize{windowSize*2};
     #else
-      const int hWinSize{windowSize};
+    const int hWinSize{windowSize};
     #endif
     
     sf::ContextSettings contextSettings{}; contextSettings.antialiasingLevel = 16;
     create(sf::VideoMode(hWinSize, windowSize), "SelectorWindow", sf::Style::Titlebar, contextSettings);
     setVerticalSyncEnabled(usingVsync);
     setFramerateLimit(framerateCap);
+    return;
+}
+
+
+SelectorWindow::SelectorWindow(float scale): windowSize{static_cast<int>(1024.f*scale)}, spriteScale{scale}
+{
+    const sf::Vector2f spriteSize {windowSize/2.f, windowSize/4.f};
     
     selectionRect = sf::RectangleShape{spriteSize};
     selectionRect.setFillColor(sf::Color::Transparent);
@@ -43,8 +47,8 @@ SelectorWindow::SelectorWindow(float scale): spriteScale{scale}
     selectionRect.setOutlineThickness(-4.f);
     SetSelection(OpType::EQ);
     
+    Create();
     Redraw();
-    
     return;
 }
 
