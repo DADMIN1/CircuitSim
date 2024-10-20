@@ -13,7 +13,7 @@
 
 //create a component for each gate on startup and validate pincount
 #define CHECK_COMPONENT_PINCOUNT
-//#undef CHECK_COMPONENT_PINCOUNT
+#undef CHECK_COMPONENT_PINCOUNT
 
 
 bool usingVsync {false};
@@ -130,7 +130,7 @@ int main(int argc, char** argv)
     
     std::vector<Component> globalInputs{};
     std::vector<Component> globalOutput{};
-    MakeGlobalIO(globalInputs, true, std::vector<bool>{ true, false, /*true, false, true, false, true, false,*/ } );
+    MakeGlobalIO(globalInputs, true, std::vector<bool>{ true, true, true, false, false, true, false, false, } );
     MakeGlobalIO(globalOutput, false, {});
     std::cout << "\nGlobal Input = " << ReadIO(globalInputs) << "\n\n";
     
@@ -148,6 +148,72 @@ int main(int argc, char** argv)
         std::cout << '\n';
     }
     #undef EVALTEST
+    
+    using BankT = std::vector<Component*>;
+    std::vector<BankT> banks {
+        components.AddBank(LogicGate::OR,  4),
+        components.AddBank(LogicGate::XOR, 2),
+    };
+    
+    // linking banks together, pairs from prev layer into each new one
+    BankT* prev = nullptr;
+    for (int bankIndex{0}; bankIndex < static_cast<int>(banks.size()); ++bankIndex) 
+    {
+        std::cout << "\nbank #" << bankIndex << '\n';
+        BankT& bank = banks[bankIndex];
+        
+        int I{0};
+        for (Component* component: bank)
+        {
+            std::cout << component->UUID() << '\n';
+            if (!prev) continue;
+            assert(I < static_cast<int>(prev->size()));
+            
+            for (int K{0}; K < 2; ++K) 
+            {
+                if((component->gate.mType == LogicGate::NOT) && (K > 0)) break;
+                Pin* pin = &component->inputs[K];
+                std::cout << "  " << prev->at(I+K)->UUID() << " -> " << pin->UUID << '\n';
+                prev->at(I+K)->CreateConnection(component, pin);
+            }
+            I = ((I+2) % prev->size());
+        }
+        
+        prev = &bank;
+    }
+    
+    // linking to global inputs
+    assert(banks.size() > 0);
+    std::cout << "\nGLOBAL INPUTS\n";
+    BankT& firstBank = banks[0];
+    std::size_t I{0};
+    for (Component* component: firstBank) {
+        assert(I < globalInputs.size());
+        for (int K{0}; K < 2; ++K) {
+            if((component->gate.mType == LogicGate::NOT) && (K > 0)) break;
+            Pin* pin = &component->inputs[K];
+            std::cout << "  " << globalInputs.at(I+K).UUID() << " -> " << pin->UUID << '\n';
+            globalInputs.at(I+K).CreateConnection(component, pin);
+            globalInputs.at(I+K).PropagateLogic();
+            component->PropagateLogic();
+        }
+        if(component->gate.mType == LogicGate::NOT) { ++I; continue; }
+        I = ((I+2) % globalInputs.size());
+    }
+    
+    // linking to global outputs
+    std::cout << "\nGLOBAL OUTPUTS\n";
+    BankT& lastBank{banks[banks.size()-1]};
+    const std::size_t numOutputs { (lastBank.size() <= globalOutput.size())? lastBank.size() : globalOutput.size()};
+    for (std::size_t I{0}; I < numOutputs; ++I)
+    {
+        Component& component = globalOutput.at(I);
+        Pin* pin = &component.inputs[0];
+        std::cout << "  " << lastBank.at(I)->UUID() << " -> " << pin->UUID << '\n';
+        lastBank.at(I)->CreateConnection(&component, pin);
+        lastBank.at(I)->PropagateLogic();
+    }
+    std::cout << "\n\n";
     
     
     while (mainWindow.isOpen())
@@ -235,6 +301,23 @@ int main(int argc, char** argv)
                             for(Component& component: globalInputs) { component.UpdateLeadColors(); }
                             for(Component& component: globalOutput) { component.UpdateLeadColors(); }
                             components.ForEach([](Component& component){ component.UpdateLeadColors(); });
+                        break;
+                        
+                        case sf::Keyboard::Delete:
+                        {
+                            selectedComponent = nullptr;
+                            const sf::Vector2f mousePosition{ sf::Mouse::getPosition(mainWindow) };
+                            auto search = [&](Component& component)
+                            {
+                                if(component.ContainsCoord(mousePosition)) {
+                                    std::cout << "Deleting: " << component.UUID() << '\n';
+                                    component.RemoveAllConnections();
+                                    components.Remove(component);
+                                    ComponentMap::Break(); return true;
+                                } return false;
+                            };
+                            components.ForEach(search);
+                        }
                         break;
                         
                         default: break;

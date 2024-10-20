@@ -176,6 +176,9 @@ class Component: public sf::Drawable
     friend void MakeGlobalIO(std::vector<Component>&, bool, std::vector<bool>);
     friend int ReadIO(const std::vector<Component>&);
     bool ReadState() const { if(incoming.empty() && !isGlobalIn) return false; return gate.state; }
+    
+    friend class ComponentMap;
+    friend int main(int argc, char** argv);
 };
 
 void MakeGlobalIO(std::vector<Component>& outvec, bool isInput, std::vector<bool> inputBits);
